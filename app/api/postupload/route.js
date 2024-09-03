@@ -1,7 +1,7 @@
+import { retryAsync } from "@/app/_utils/retryAsync";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { retryAsync } from "@/utils/retryAsync"; // Adjust the path as needed
 
 const PINECONE_API_KEY = process.env.PINECONE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
