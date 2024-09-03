@@ -19,23 +19,23 @@ export async function GET() {
     );
     let processed_data = JSON.parse(embeddingsData);
 
-    processed_data = processed_data.map((item) => {
-      const { video } = item.metadata;
-      const videoKey = video?.key || "";
-      const videoSite = video?.site || "";
-      const videoName = video?.name || "";
+    // processed_data = processed_data.map((item) => {
+    //   const { video } = item.metadata;
+    //   const videoKey = video?.key || "";
+    //   const videoSite = video?.site || "";
+    //   const videoName = video?.name || "";
 
-      return {
-        ...item,
-        metadata: {
-          ...item.metadata,
-          videoKey,
-          videoSite,
-          videoName,
-          video: undefined,
-        },
-      };
-    });
+    //   return {
+    //     ...item,
+    //     metadata: {
+    //       ...item.metadata,
+    //       videoKey,
+    //       videoSite,
+    //       videoName,
+    //       video: undefined,
+    //     },
+    //   };
+    // });
 
     const totalItems = processed_data.length;
     const totalBatches = Math.ceil(totalItems / BATCH_SIZE);

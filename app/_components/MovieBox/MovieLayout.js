@@ -1,23 +1,18 @@
 "use client";
 
-import Header from "@/app/_components/Header";
 import MovieDetails from "@/app/_components/MovieBox/MovieDetails";
 import MovieSearchForm from "@/app/_components/MovieBox/MovieSearchForm";
-import Sidebar from "@/app/_components/Sidebar";
 import Spinner from "@/app/_components/Spinner";
 import { useMovies } from "@/app/_context/MoviesContext";
 import { useSearchMovie } from "@/app/_hooks/useSearchMovie";
 import placeholder from "@/public/images/watching-movie.png";
-import { Box, CssBaseline, Grid, Toolbar, Typography } from "@mui/material";
+import { Box, Grid, Toolbar, Typography } from "@mui/material";
 import Image from "next/image";
 import { useState } from "react";
 
 function ErrorMessage({ message }) {
   return (
-    <Typography
-      variant="h5"
-      sx={{ pb: 4, textAlign: "center", color: "#94a6b8" }}
-    >
+    <Typography variant="h5" sx={{ pb: 4, textAlign: "center" }}>
       <span>⛔️</span> {message}
     </Typography>
   );
@@ -35,22 +30,22 @@ function MovieList({ movies, onSelectMovie }) {
 
 function Movie({ movie, onSelectMovie }) {
   return (
-    <li onClick={() => onSelectMovie(movie.id)}>
+    <li onClick={() => onSelectMovie(movie.id, movie.movieType)}>
       <img
         src={
           !movie.poster_path
             ? "/images/placeholder.png"
             : `https://image.tmdb.org/t/p/w500${movie.poster_path}`
         }
-        alt={`${movie.title} poster`}
+        alt={`${movie.title || movie.name} poster`}
       />
-      <Typography variant="h5" sx={{ color: "#94a6b8" }}>
-        {movie.title}
-      </Typography>
+      <Typography variant="h5">{movie.title || movie.name}</Typography>
       <div>
         <Typography variant="body1">
           <Typography variant="body3">🗓</Typography>
-          <Typography variant="body3">{movie.release_date}</Typography>
+          <Typography variant="body3">
+            {movie.release_date || movie.first_air_date}
+          </Typography>
         </Typography>
       </div>
     </li>
@@ -80,19 +75,8 @@ function MovieLayout() {
   }
 
   return (
-    <Box
-      sx={{
-        display: state.drawerOpen ? "flex" : "block",
-        transition: "width 0.3s ease",
-        height: "100vh",
-      }}
-    >
-      <CssBaseline />
-      <Header />
-      <Sidebar />
-
+    <Grid item xs={12} md={10} component="main" sx={{ p: 2, height: "100%" }}>
       <Box
-        component="main"
         sx={{
           p: 3,
           maxWidth: "65rem",
@@ -101,8 +85,9 @@ function MovieLayout() {
           marginRight: "auto",
           display: "flex",
           flexDirection: "column",
-          height: "100vh",
+          height: "100%",
           transition: "margin-left 0.3s ease",
+          // overflow: "scroll",
         }}
       >
         <Toolbar />
@@ -110,9 +95,9 @@ function MovieLayout() {
 
         <Grid
           container
-          spacing={3}
+          spacing={2}
           sx={{
-            marginTop: "2.4rem",
+            marginTop: 2,
             flexGrow: 1,
             height: "calc(100vh - 7.2rem - 3* 2.4rem)",
           }}
@@ -131,7 +116,9 @@ function MovieLayout() {
                   {!state.searchLoading && !state.searchError && (
                     <MovieList
                       movies={state.searchCollections}
-                      onSelectMovie={(id) => handleSelectMovie(id)}
+                      onSelectMovie={(id, movieType) =>
+                        handleSelectMovie(id, movieType)
+                      }
                     />
                   )}
 
@@ -177,6 +164,7 @@ function MovieLayout() {
                   display: "flex",
                   flexDirection: "column",
                   borderRadius: "4px",
+                  paddingBottom: "20px",
                 }}
               >
                 <MovieBox>
@@ -190,7 +178,7 @@ function MovieLayout() {
           )}
         </Grid>
       </Box>
-    </Box>
+    </Grid>
   );
 }
 

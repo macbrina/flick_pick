@@ -8,12 +8,19 @@ const scrapeMovieData = async (url) => {
 
     const metaTag = $('meta[property="og:url"]').attr("content");
     const movieIdMatch = metaTag.match(/\/movie\/(\d+)/);
-    const movieId = movieIdMatch ? movieIdMatch[1] : null;
+    const tvIdMatch = metaTag.match(/\/tv\/(\d+)/);
 
-    if (!movieId) {
-      throw new Error("Movie ID not found");
+    const movieId = movieIdMatch ? movieIdMatch[1] : null;
+    const tvId = tvIdMatch ? tvIdMatch[1] : null;
+
+    if (!movieId && !tvId) {
+      throw new Error("Movie or TV show ID not found");
     }
-    return movieId;
+
+    return {
+      movieId: movieId || null,
+      tvId: tvId || null,
+    };
   } catch (error) {
     console.error("Error scraping data:", error.message);
     throw new Error("Failed to scrape data");

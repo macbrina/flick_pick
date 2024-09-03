@@ -1,4 +1,5 @@
 import { LANGUAGEMAPPING } from "@/app/_utils/constants";
+import { isBefore, parseISO } from "date-fns";
 import { v4 as uuidv4 } from "uuid";
 
 export function generateUniqueId() {
@@ -137,4 +138,124 @@ export const getVideoUrl = (site, keyOrId) => {
       console.warn(`Unsupported site: ${site}`);
       return null;
   }
+};
+
+export function GENREIDSTONAME(id) {
+  const genres = {
+    // TV show genres (not duplicated in movies)
+    10759: "Action & Adventure",
+    10762: "Kids",
+    10763: "News",
+    10764: "Reality",
+    10765: "Sci-Fi & Fantasy",
+    10766: "Soap",
+    10767: "Talk",
+    10768: "War & Politics",
+
+    // Movie genres (removed duplicates)
+    28: "Action",
+    12: "Adventure",
+    16: "Animation",
+    35: "Comedy",
+    80: "Crime",
+    99: "Documentary",
+    18: "Drama",
+    10751: "Family",
+    14: "Fantasy",
+    36: "History",
+    27: "Horror",
+    10402: "Music",
+    9648: "Mystery",
+    10749: "Romance",
+    878: "Science Fiction",
+    10770: "TV Movie",
+    53: "Thriller",
+    10752: "War",
+    37: "Western",
+  };
+
+  const genreName = genres[id] || "Unknown";
+  return genreName;
+}
+
+export function extractVideoIdFromURL(url) {
+  const regex =
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:watch\?v=|embed\/|v\/|.+\?v=)([a-zA-Z0-9_-]{11})|(?:https?:\/\/)?(?:www\.)?youtu\.be\/([a-zA-Z0-9_-]{11})/;
+  const match = url.match(regex);
+  return match ? match[1] || match[2] : null;
+}
+
+export function formatNumber(number) {
+  if (number < 1000) {
+    return number.toString();
+  } else if (number >= 1000 && number < 1000000) {
+    return (number / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  } else if (number >= 1000000 && number < 1000000000) {
+    return (number / 1000000).toFixed(1).replace(/\.0$/, "") + "m";
+  } else if (number >= 1000000000 && number < 1000000000000) {
+    return (number / 1000000000).toFixed(1).replace(/\.0$/, "") + "b";
+  } else {
+    return (number / 1000000000000).toFixed(1).replace(/\.0$/, "") + "t";
+  }
+}
+
+export function getChatLimitBasedOnPlan(planName) {
+  switch (planName) {
+    case "Premium":
+      return -1;
+    case "Free":
+      return 15;
+    default:
+      return 0;
+  }
+}
+
+export function getPostLimitBasedOnPlan(planName) {
+  switch (planName) {
+    case "Premium":
+      return -1;
+    case "Free":
+      return 10;
+    default:
+      return 0;
+  }
+}
+
+export function getWatchListLimitBasedOnPlan(planName) {
+  switch (planName) {
+    case "Premium":
+      return -1;
+    case "Free":
+      return 10;
+    default:
+      return 0;
+  }
+}
+
+export function getHistoryLimitBasedOnPlan(planName) {
+  switch (planName) {
+    case "Premium":
+      return -1;
+    case "Free":
+      return 10;
+    default:
+      return 0;
+  }
+}
+
+export function getScrapeLimitBasedOnPlan(planName) {
+  switch (planName) {
+    case "Premium":
+      return -1;
+    case "Free":
+      return 5;
+    default:
+      return 0;
+  }
+}
+
+export const isSubscriptionActive = (endsAt) => {
+  const now = new Date();
+  const endDate = parseISO(endsAt);
+  return isBefore(now, endDate);
 };

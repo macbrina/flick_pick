@@ -1,5 +1,6 @@
 import scrapeMovieData from "@/app/_lib/scraper";
 import { GENREIDSTONAME, LANGUAGEMAPPING } from "@/app/_utils/constants";
+import { fetchWithRetry } from "@/app/_utils/fetchWithRetry";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -17,10 +18,10 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const fetchMovieDetailsById = async (movieId) => {
+const fetchMovieDetailsById = async (movieId, type) => {
   try {
-    const url = `https://api.themoviedb.org/3/movie/${movieId}`;
-    const response = await fetch(url, {
+    let url = `https://api.themoviedb.org/3/${type}/${movieId}`;
+    const response = await fetchWithRetry(url, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -44,18 +45,50 @@ export async function POST(req) {
   try {
     const { url } = await req.json();
 
-    // const namespace = index.namespace("ns1");
-    // await namespace.upsert(batch);
+    let type;
+    let fetchId;
 
-    const movieId = await scrapeMovieData(url);
-    const movieData = await fetchMovieDetailsById(movieId);
+    const { movieId, tvId } = await scrapeMovieData(url);
+
+    if (movieId) {
+      type = "movie";
+      fetchId = movieId;
+    } else {
+      type = "tv";
+      fetchId = tvId;
+    }
+
+    const movieData = await fetchMovieDetailsById(fetchId, type);
+
+    const video = await fetchWithRetry(
+      `${process.env.NEXT_PUBLIC_BASE_URL}/api/movievideo`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ movieId: fetchId, type }),
+      }
+    );
+
+    if (!video.ok) {
+      throw new Error("Failed to fetch movie details");
+    }
+
+    const videoData = await video.json();
+
     const keywords = [
-      movieData.title,
+      movieData.title || movieData.name,
       ...movieData.genres.map((id) => GENREIDSTONAME(id)),
     ];
     const language = LANGUAGEMAPPING[movieData.original_language];
+    const additionalData = movieId
+      ? "Movie Single Movie"
+      : "TV Show TvShow Series";
 
-    const combined_text = `${movieData.title} ${language} ${
+    const combined_text = `${
+      movieData.title || movieData.name
+    } ${language} ${additionalData} ${
       movieData.overview
     } ${movieData.genres.join(" ")} ${keywords.join(" ")}`;
 
@@ -73,13 +106,17 @@ export async function POST(req) {
         values: embeddings.data[0].embedding,
         id: String(movieData.id),
         metadata: {
-          title: movieData.title,
+          title: movieData.title || movieData.name,
           image: movieData.poster_path,
           rating: movieData.vote_average,
           genres: movieData.genres.map((genre) => genre.name),
           description: movieData.overview,
           keywords: keywords,
           language: language,
+          movieType: movieId ? "movie" : "tv",
+          type: movieId ? "movie" : "tv",
+          source: "tmdb",
+          ...videoData.data,
         },
       },
     ];
@@ -90,11 +127,13 @@ export async function POST(req) {
       {
         id: movieData.id,
         poster_path: movieData.poster_path,
-        title: movieData.title,
-        release_date: movieData.release_date,
+        movieType: movieId ? "movie" : "tv",
+        title: movieData.title || movieData.name,
+        release_date: movieData.release_date || movieData.first_air_date,
       },
     ];
 
+    console.log("data", data);
     return NextResponse.json({ success: true, data: data });
   } catch (error) {
     console.error("Error retrying upload to Pinecone:", error);

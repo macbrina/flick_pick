@@ -4,21 +4,23 @@ import { CircularProgress, Stack, Typography } from "@mui/material";
 import { useState, useTransition } from "react";
 import DeleteDialog from "@/app/_components/DeleteDialog";
 
-function WatchMovie({ movie, onDeleteWatched }) {
+function WatchMovie({ movie, onDeleteWatched, isPendingDelete }) {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [isPending, startTransistion] = useTransition();
 
   function handleDeleteConfirm() {
     setShowDeleteConfirmation(false);
-    startTransistion(() => onDeleteWatched(movie.id));
+    startTransistion(() => onDeleteWatched(Array.from(selectedIds)));
   }
 
-  const handleDeleteClick = () => {
+  const handleDeleteClick = (id) => {
+    setSelectedIds((prev) => new Set(prev).add(id));
     setShowDeleteConfirmation(true);
   };
 
   const handleDeleteClose = () => {
+    setSelectedIds(new Set());
     setShowDeleteConfirmation(false);
   };
 
@@ -34,15 +36,17 @@ function WatchMovie({ movie, onDeleteWatched }) {
           justifyContent="space-between"
           alignItems="center"
         >
-          <Typography variant="h5" sx={{ color: "#94a6b8" }}>
-            {movie.title}
-          </Typography>
+          <Typography variant="h5">{movie.title}</Typography>
           <button
             className="btn-delete"
-            onClick={handleDeleteClick}
-            disabled={isPending}
+            onClick={() => handleDeleteClick(movie.id)}
+            disabled={isPendingDelete}
           >
-            {isPending ? <CircularProgress /> : "X"}
+            {isPendingDelete ? (
+              <CircularProgress size={15} color="inherit" />
+            ) : (
+              "X"
+            )}
           </button>
         </Stack>
         <Stack direction="row" spacing={3} alignItems="center">

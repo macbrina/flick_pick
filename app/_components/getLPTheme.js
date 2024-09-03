@@ -175,33 +175,33 @@ const getDesignTokens = (mode) => ({
       lineHeight: 78 / 70,
       letterSpacing: -0.2,
       fontFamily: '"Roboto", sans-serif',
-      color: mode === "dark" ? "#fff" : gray[800],
+      color: mode === "dark" ? "#F2F4F5" : gray[800],
     },
     h2: {
       fontSize: 48,
       fontWeight: 600,
       lineHeight: 1.2,
-      color: mode === "dark" ? "#fff" : gray[800],
+      color: mode === "dark" ? "#F2F4F5" : gray[800],
     },
     h3: {
       fontSize: 42,
       lineHeight: 1.2,
-      color: mode === "dark" ? "#fff" : gray[800],
+      color: mode === "dark" ? "#F2F4F5" : gray[800],
     },
     h4: {
       fontSize: 36,
       fontWeight: 600,
       lineHeight: 1.5,
-      color: mode === "dark" ? "#fff" : gray[800],
+      color: mode === "dark" ? "#F2F4F5" : gray[800],
     },
     h5: {
       fontSize: 20,
       fontWeight: 600,
-      color: mode === "dark" ? "#fff" : gray[800],
+      color: mode === "dark" ? "#F2F4F5" : gray[800],
     },
     h6: {
       fontSize: 18,
-      color: mode === "dark" ? "#fff" : gray[800],
+      color: mode === "dark" ? "#F2F4F5" : gray[800],
     },
     subtitle1: {
       fontSize: 18,
@@ -346,8 +346,8 @@ export default function getLPTheme(mode) {
             // },
             "&.Mui-disabled": {
               color: "#fff",
-              backgroundImage: "linear-gradient(to bottom, #676767, #676767)",
-              outline: "1px solid #646669",
+              opacity: 0.65,
+              cursor: "not-allowed",
             },
             ...(ownerState.size === "small" && {
               maxHeight: "32px",
@@ -549,7 +549,7 @@ export default function getLPTheme(mode) {
           root: ({ theme }) => ({
             // backgroundImage: "none",
             backgroundColor:
-              theme.palette.mode === "dark" ? alpha(gray[900], 0.7) : gray[100],
+              theme.palette.mode === "dark" ? alpha(gray[900], 0.7) : gray[50],
             boxShadow:
               theme.palette.mode === "dark"
                 ? `0px 4px 6px ${alpha(gray[900], 0.3)}`
@@ -557,12 +557,36 @@ export default function getLPTheme(mode) {
           }),
         },
       },
+      MuiDialog: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            backgroundImage: "none",
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha(gray[900], 0.7)
+                : alpha(gray[50], 0.7),
+            boxShadow:
+              theme.palette.mode === "dark"
+                ? `0px 4px 6px ${alpha(gray[900], 0.3)}`
+                : theme.shadows[1],
+
+            "& .MuiDialog-paper": {
+              backgroundImage:
+                theme.palette.mode === "dark"
+                  ? "linear-gradient(#2f2f2f, #2f2f2f)"
+                  : "inherit",
+            },
+          }),
+        },
+      },
+
       MuiList: {
         styleOverrides: {
           root: ({ theme }) => ({
             // backgroundImage: "none",
+            height: "100%",
             backgroundColor:
-              theme.palette.mode === "dark" ? alpha(gray[900], 0.9) : gray[100],
+              theme.palette.mode === "dark" ? alpha(gray[900], 0.9) : gray[50],
             boxShadow:
               theme.palette.mode === "dark"
                 ? `0px 4px 6px ${alpha(gray[900], 0.7)}`
@@ -664,8 +688,8 @@ export default function getLPTheme(mode) {
               },
               "&.Mui-focused": {
                 borderColor: brand[400],
-                outline: "4px solid",
-                outlineColor: brand[200],
+                outline: "none",
+                outlineColor: "transparent",
               },
             },
             ...(theme.palette.mode === "dark" && {
@@ -701,6 +725,79 @@ export default function getLPTheme(mode) {
               },
             }),
           }),
+        },
+      },
+      MuiSvgIcon: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            color: "rgba(0, 0, 0, 0.54)",
+            width: "0.9em",
+            height: "0.9em",
+            ...(theme.palette.mode === "dark" && {
+              color: gray[400],
+            }),
+          }),
+        },
+      },
+      MuiSelect: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            "& .MuiInputBase-root": {
+              boxSizing: "border-box",
+              minWidth: 280,
+              minHeight: 55,
+              height: "100%",
+              borderRadius: "50px",
+              border: "1px solid",
+              borderColor: gray[200],
+              transition: "border-color 120ms ease-in",
+              "&:hover": {
+                borderColor: brand[300],
+              },
+              "&.Mui-focused": {
+                borderColor: brand[400],
+                outline: "4px solid",
+                outlineColor: brand[200],
+              },
+            },
+            ...(theme.palette.mode === "dark" && {
+              "& .MuiInputBase-root": {
+                boxSizing: "border-box",
+                minWidth: 280,
+                minHeight: 55,
+                height: "100%",
+                borderRadius: "50px",
+                border: "1px solid",
+                borderColor: gray[600],
+                transition: "border-color 120ms ease-in",
+                padding: "16.5px 20px",
+                "&:hover": {
+                  borderColor: gray[500],
+                },
+                "&.Mui-focused": {
+                  borderColor: "transparent",
+                  outline: "none",
+                  outlineColor: "transparent",
+                },
+                "& .MuiOutlinedInput-input": {
+                  color: gray[500],
+                  "& .MuiSelect-select": {
+                    color: gray[500],
+                  },
+                },
+              },
+            }),
+          }),
+          select: {
+            padding: "16.5px 20px",
+            borderColor: gray[500],
+            "&:focus": {
+              backgroundColor: "transparent",
+            },
+          },
+          icon: {
+            color: gray[400],
+          },
         },
       },
     },

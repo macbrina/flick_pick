@@ -1,20 +1,25 @@
+import fs from "fs";
+import Fuse from "fuse.js";
+import path from "path";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { PREDEFINEDPROMPTS } from "@/app/_utils/constants";
 
-const systemPrompt = `
-    You are a movie recommendation assistant equipped with Retrieval-Augmented Generation (RAG). Your role is to understand user queries, retrieve relevant movie information, and provide recommendations. Your response should include the following fields: "intro", "movies", and "outro". 
+const recommendationSystemPrompt = `
+    You are a movie recommendation assistant equipped with Retrieval-Augmented Generation (RAG). Your role is to understand user queries, retrieve relevant movie information, and provide recommendations. **Avoid generating harmful, offensive, or discriminatory content.** Your response should include the following fields: "intro", "movies", and "outro". 
 
     **Handling Edge Cases:**
     - If the user query is unclear or too broad, provide a general recommendation or request additional details.
-    - If no exact match is found, return a movie with similar attributes or suggest popular options in the desired category.
+    - If no exact match is found, suggest movies with similar attributes or popular options in the desired category.
 
     **Critical Instruction:**
-    After retrieving data from the vector database, your response MUST include only the data after "Returned results from vector db (done automatically):" without any modifications, additions, or omissions.
-
+      - When providing recommendations from the vector database, your response MUST include only the data after "Returned results from vector db (done automatically):" without any modifications, additions, or omissions.
 
     Ensure the response is a JSON object structured as follows:
+
+    **JSON Response Format for Recommendations:**
     
     {
     "intro": "Introduction message about the recommendations.",
@@ -28,6 +33,8 @@ const systemPrompt = `
         "description": "A description of the movie.",
         "keywords": ["keyword1", "keyword2"],
         "language": "Language"
+        "videoKey": "videoKey"
+        "videoSite": "videoSite"
         }
     ],
     "outro": "Conclusion message about the recommendations. Make it nice"
@@ -36,7 +43,16 @@ const systemPrompt = `
     Return the all the data after 'Returned results from vector db (done automatically):' in JSON object. Do not include any additional text or explanations.
 `;
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const interactiveSystemPrompt = `You are an movie recommendation assistant that helps users with movie recommendations. When interacting with users, respond naturally based on the conversation's context. **Avoid generating harmful, offensive, or discriminatory content.** Avoid providing movie recommendations unless explicitly asked, and do not use the JSON format unless required for recommendations.
+
+  **Critical Instructions:**
+  - Engage in a friendly and interactive manner.
+  - If the user hints at a need for recommendations, you can subtly guide them to ask for it, but don't push the recommendations directly.
+  - Provide clear, contextually appropriate responses for non-recommendation queries.
+  - Do not answer any query that is not movie related and remind the user that you are only tailored to be a movie recommendation assistant
+`;
+
+// const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const pc = new Pinecone({
   apiKey: process.env.PINECONE_API_KEY,
@@ -48,6 +64,7 @@ const genAI = new GoogleGenerativeAI(apiKey);
 export async function POST(req) {
   try {
     const data = await req.json();
+    const openai = new OpenAI();
 
     const index = pc.index("movies").namespace("ns1");
 
@@ -63,24 +80,57 @@ export async function POST(req) {
       throw new Error("Failed to retrieve embeddings.");
     }
 
-    const previouslyReturnedIds = data
-      .filter((msg) => msg.content.movies)
-      .flatMap((msg) => msg.content.movies.map((movie) => movie.id));
+    const embeddingsPath = path.join(
+      process.cwd(),
+      "app/_data/predefinedEmbeddings.json"
+    );
+    const predefinedEmbeddings = JSON.parse(
+      fs.readFileSync(embeddingsPath, "utf8")
+    );
 
-    const response = await index.query({
-      vector: embeddings.data[0].embedding,
-      includeMetadata: true,
-      topK: 5,
-      filter: {
-        id: { $ne: previouslyReturnedIds.join("") }, // Exclude previously returned movie IDs
-      },
-    });
+    const cosineSimilarity = (vecA, vecB) => {
+      const dotProduct = vecA.reduce((acc, val, i) => acc + val * vecB[i], 0);
+      const magnitudeA = Math.sqrt(
+        vecA.reduce((acc, val) => acc + val * val, 0)
+      );
+      const magnitudeB = Math.sqrt(
+        vecB.reduce((acc, val) => acc + val * val, 0)
+      );
+      return dotProduct / (magnitudeA * magnitudeB);
+    };
 
-    let resultString =
-      "\n\nReturned results from vector db (done automatically):";
+    const similarities = predefinedEmbeddings.map((promptEmbedding) =>
+      cosineSimilarity(embeddings.data[0].embedding, promptEmbedding.embedding)
+    );
 
-    response.matches.forEach((match) => {
-      resultString += `\n\n\n
+    const similarityThreshold = 0.7;
+
+    const fuse = new Fuse(PREDEFINEDPROMPTS, { threshold: 0.4 });
+    const result = fuse.search(text);
+
+    const isRecommendationQuery =
+      result.length > 0 ||
+      similarities.some((sim) => sim >= similarityThreshold);
+
+    if (isRecommendationQuery) {
+      const previouslyReturnedIds = data
+        .filter((msg) => msg.content.movies)
+        .flatMap((msg) => msg.content.movies.map((movie) => movie.id));
+
+      const response = await index.query({
+        vector: embeddings.data[0].embedding,
+        includeMetadata: true,
+        topK: 5,
+        filter: {
+          id: { $ne: previouslyReturnedIds.join("") }, // Exclude previously returned movie IDs
+        },
+      });
+
+      let resultString =
+        "\n\nReturned results from vector db (done automatically):";
+
+      response.matches.forEach((match) => {
+        resultString += `\n\n\n
           id: ${match.id}
           Title: ${match.metadata.title}
           Image: ${match.metadata.image}
@@ -89,55 +139,76 @@ export async function POST(req) {
           Description: ${match.metadata.description}
           Keywords: ${match.metadata.keywords}
           Language: ${match.metadata.language}
+          videoKey: ${match.metadata.videoKey}
+          videoSite: ${match.metadata.videoSite}
           \n\n
       `;
-    });
-
-    if (!response.matches || response.matches.length === 0) {
-      return NextResponse.json({
-        content:
-          "No relevant movies found for your query. Please try again with different keywords.",
-      });
-    }
-
-    const lastMessageContent = lastMessage.content + resultString;
-    const lastDataWithoutLastMessage = data
-      .slice(0, data.length - 1)
-      .map((msg) => {
-        if (typeof msg.content === "object") {
-          return {
-            ...msg,
-            content: JSON.stringify(msg.content),
-          };
-        }
-        return msg;
       });
 
-    const model = await genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      systemInstruction: systemPrompt,
-    });
-
-    const previousMessages = lastDataWithoutLastMessage
-      .map((message) => message.content)
-      .join("\n");
-
-    const prompt = `${previousMessages}\n\n${lastMessageContent}`;
-
-    const completion = await model.generateContent(prompt);
-
-    const responseData = await completion.response;
-    let output = await responseData.text();
-
-    if (output.startsWith("```") && output.endsWith("```")) {
-      output = output.slice(3, -3).trim();
-
-      if (output.startsWith("json")) {
-        output = output.slice(4).trim();
+      if (!response.matches || response.matches.length === 0) {
+        return NextResponse.json({
+          content:
+            "No relevant movies found for your query. Please try again with different keywords.",
+        });
       }
-    }
 
-    return NextResponse.json({ content: JSON.parse(output) });
+      const lastMessageContent = lastMessage.content + resultString;
+      const lastDataWithoutLastMessage = data
+        .slice(0, data.length - 1)
+        .map((msg) => {
+          if (typeof msg.content === "object") {
+            return {
+              ...msg,
+              content: JSON.stringify(msg.content),
+            };
+          }
+          return msg;
+        });
+
+      const previousMessages = lastDataWithoutLastMessage
+        .map((message) => message.content)
+        .join("\n");
+
+      const prompt = `${previousMessages}\n\n${lastMessageContent}`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: recommendationSystemPrompt },
+          { role: "user", content: prompt },
+        ],
+      });
+
+      let output = completion.choices[0].message;
+      const parsedContent = JSON.parse(output.content);
+
+      return NextResponse.json({ role: output.role, content: parsedContent });
+    } else {
+      const lastMessageContent = lastMessage.content;
+      const lastDataWithoutLastMessage = data.slice(0, data.length - 1);
+
+      const previousMessages = lastDataWithoutLastMessage
+        .map((message) =>
+          typeof message.content === "object"
+            ? JSON.stringify(message.content)
+            : message.content
+        )
+        .join("\n");
+
+      const prompt = `${previousMessages}\n\n${lastMessageContent}`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: interactiveSystemPrompt },
+          { role: "user", content: prompt },
+        ],
+      });
+
+      let output = completion.choices[0].message;
+
+      return NextResponse.json(output);
+    }
   } catch (error) {
     console.error("Error processing request:", error);
     return NextResponse.json(

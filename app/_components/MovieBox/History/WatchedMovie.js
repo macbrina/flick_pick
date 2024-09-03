@@ -33,9 +33,7 @@ function WatchedMovie({ movie, onDeleteWatched }) {
           justifyContent="space-between"
           alignItems="center"
         >
-          <Typography variant="h5" sx={{ color: "#94a6b8" }}>
-            {movie.title}
-          </Typography>
+          <Typography variant="h5">{movie.title}</Typography>
           <button
             className="btn-delete"
             onClick={handleDeleteClick}

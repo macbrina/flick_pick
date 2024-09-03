@@ -1,22 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { Close } from "@mui/icons-material";
 import {
-  Modal,
   Box,
-  Typography,
-  TextField,
   Button,
-  Grid,
   CircularProgress,
+  Grid,
+  Modal,
+  Skeleton,
+  TextField,
+  Tooltip,
+  Typography,
 } from "@mui/material";
+import Image from "next/image";
+import { useState } from "react";
 
 function ShareModal({ movie, open, onClose, onShare, isSharing }) {
   const [postContent, setPostContent] = useState("");
+  const [imageLoading, setImageLoading] = useState(true);
 
   const handleShare = async () => {
     await onShare(postContent);
-    onClose();
+    setPostContent("");
+    // onClose();
   };
 
   return (
@@ -42,6 +48,11 @@ function ShareModal({ movie, open, onClose, onShare, isSharing }) {
         <Typography id="share-modal-title" variant="h6" component="h2">
           Share {movie.title}
         </Typography>
+        <button className="btn-toggle" onClick={onClose}>
+          <Tooltip title="Close">
+            <Close sx={{ color: "#fff" }} />
+          </Tooltip>
+        </button>
 
         <Grid container spacing={2} sx={{ mt: 2 }}>
           <Grid item xs={12}>
@@ -54,31 +65,52 @@ function ShareModal({ movie, open, onClose, onShare, isSharing }) {
                 objectFit: "contain",
               }}
             >
-              <img
-                src={
-                  !movie.poster_path
-                    ? "/images/placeholder.png"
-                    : `https://image.tmdb.org/t/p/w500${movie.poster_path}`
-                }
-                alt={movie.title}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  borderRadius: 8,
+              <Grid item xs={12}>
+                <TextField
+                  label="Your Post"
+                  fullWidth
+                  multiline
+                  value={postContent}
+                  onChange={(e) => setPostContent(e.target.value)}
+                  variant="outlined"
+                  sx={{ marginBottom: "15px" }}
+                />
+              </Grid>
+              <Box
+                sx={{
+                  position: "relative",
+                  height: "200px",
+                  overflow: "hidden",
+                  borderRadius: "8px",
+                  objectFit: "cover",
                 }}
-              />
+              >
+                {imageLoading && (
+                  <Skeleton
+                    height="200px"
+                    width="100%"
+                    variant="rectangular"
+                    animation="pulse"
+                  />
+                )}
+                <Image
+                  src={
+                    !movie.poster_path
+                      ? "/images/placeholder.png"
+                      : `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+                  }
+                  alt={movie.title}
+                  fill
+                  style={{
+                    objectFit: "contain",
+                    display: imageLoading ? "none" : "block",
+                  }}
+                  sizes="(max-width: 600px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  priority
+                  onLoad={() => setImageLoading(false)}
+                />
+              </Box>
             </Box>
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              label="Your Post"
-              fullWidth
-              multiline
-              value={postContent}
-              onChange={(e) => setPostContent(e.target.value)}
-              variant="outlined"
-            />
           </Grid>
         </Grid>
 
@@ -98,7 +130,7 @@ function ShareModal({ movie, open, onClose, onShare, isSharing }) {
           >
             {isSharing ? (
               <>
-                <CircularProgress size={20} color="inherit" /> Posting...
+                <CircularProgress size={20} color="inherit" />
               </>
             ) : (
               "Share"

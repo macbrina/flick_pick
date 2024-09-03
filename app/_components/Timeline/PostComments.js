@@ -1,13 +1,16 @@
 "use client";
 
+import DeleteDialog from "@/app/_components/DeleteDialog";
 import { useMovies } from "@/app/_context/MoviesContext";
 import { db } from "@/app/_firebase/config";
 import { deleteComment, getPostComments } from "@/app/_lib/data-service";
 import { useIsUserLoggedIn } from "@/app/_utils/auth";
-import { Delete, DeleteOutline } from "@mui/icons-material";
+import { formatPostTime } from "@/app/_utils/utilities";
+import { DeleteOutline } from "@mui/icons-material";
 import {
   Avatar,
   Box,
+  Button,
   CircularProgress,
   IconButton,
   Stack,
@@ -22,24 +25,13 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import {
-  useEffect,
-  useMemo,
-  useOptimistic,
-  useState,
-  useTransition,
-} from "react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { toast } from "react-toastify";
-import DeleteDialog from "@/app/_components/DeleteDialog";
 
 const PostComments = ({ postId, movie }) => {
   const { state, increasePostComments, addToComments, removeFromComments } =
     useMovies();
-  const [lastComment, setLastComment] = useState(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [allCommentsLoaded, setAllCommentsLoaded] = useState(false);
   const { isLoggedIn, user } = useIsUserLoggedIn();
-  const [initialLoad, setInitialLoad] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [deletePending, setDeletePending] = useState({});
@@ -149,8 +141,6 @@ const PostComments = ({ postId, movie }) => {
     commentState.initialLoad,
   ]);
 
-  console.log("comments", state.comments);
-
   const handleLoadMoreComments = async () => {
     if (commentState.lastComment && !commentState.allCommentsLoaded) {
       setCommentState((prev) => ({ ...prev, loadingMore: true }));
@@ -193,8 +183,9 @@ const PostComments = ({ postId, movie }) => {
           postComments.map((comment) => (
             <Box
               key={comment.id}
-              sx={{
-                backgroundColor: "#313131",
+              sx={(theme) => ({
+                backgroundColor:
+                  theme.palette.mode == "dark" ? "#313131" : "#f2f2f2",
                 padding: "8px",
                 borderRadius: "8px",
                 display: "flex",
@@ -204,7 +195,7 @@ const PostComments = ({ postId, movie }) => {
                 position: "relative",
                 cursor: "pointer",
                 mb: 1,
-              }}
+              })}
             >
               <Stack direction="row" spacing={2} alignItems="center">
                 <Avatar alt={comment.username} src={comment.avatarUrl} />
@@ -212,9 +203,9 @@ const PostComments = ({ postId, movie }) => {
                   <Stack direction="row" spacing={3}>
                     <Typography variant="body2">
                       <strong>{comment.username}</strong> .{" "}
-                      {new Date(
-                        comment.createdAt.seconds * 1000
-                      ).toLocaleString()}
+                      {formatPostTime(
+                        new Date(comment.createdAt.seconds * 1000)
+                      )}
                     </Typography>
                   </Stack>
                   <Typography variant="body2">{comment.text}</Typography>
@@ -224,7 +215,6 @@ const PostComments = ({ postId, movie }) => {
                 <Tooltip title="Delete Comment">
                   <span>
                     <IconButton
-                      sx={{ color: "#94a6b8" }}
                       onClick={() =>
                         handleDeleteClick(comment.id, comment.postId)
                       }
@@ -244,12 +234,12 @@ const PostComments = ({ postId, movie }) => {
       </div>
       {!commentState.allCommentsLoaded &&
         postComments.length < movie.commentsCount && (
-          <button
+          <Button
             onClick={handleLoadMoreComments}
             disabled={commentState.loadingMore}
           >
             {commentState.loadingMore ? "Loading..." : "Load more comments"}
-          </button>
+          </Button>
         )}
 
       <DeleteDialog

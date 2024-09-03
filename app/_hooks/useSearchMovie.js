@@ -3,8 +3,6 @@
 import { useState, useEffect } from "react";
 import { useMovies } from "@/app/_context/MoviesContext";
 
-const KEY = "5220e97f";
-
 export function useSearchMovie(query) {
   const { state, dispatch, updateSearchList, handleSelectMovie } = useMovies();
 

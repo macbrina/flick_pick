@@ -25,11 +25,12 @@ const styles = `
 export default function ChatBubble({ role, content, sending, error }) {
   const isAssistant = role === "assistant";
   const [visible, setVisible] = useState(false);
+
   const isLastMessage =
     !content?.movies &&
-    (content.includes("error") ||
-      content.includes("Error") ||
-      content.trim() == "");
+    (content?.includes("error") ||
+      content?.includes("Error") ||
+      content?.trim() == "");
 
   useEffect(() => {
     if (isAssistant && !sending && !error && !isLastMessage) {
@@ -63,35 +64,41 @@ export default function ChatBubble({ role, content, sending, error }) {
         />
       ) : (
         <Box
-          sx={{
+          sx={(theme) => ({
             maxWidth: "90%",
             p: 2,
             mb: 4,
             borderRadius: 2,
             backgroundImage: isAssistant
-              ? "linear-gradient(45deg, #2f2f2f 30%, #2f2f2f 90%)"
-              : "linear-gradient(45deg, #343a40 30%, #343a40 90%)",
-            color: "#000",
+              ? theme.palette.mode == "dark"
+                ? "linear-gradient(45deg, #2f2f2f 30%, #2f2f2f 90%)"
+                : "linear-gradient(45deg, #d9d1ed 30%, #dcc2f4 90%)"
+              : theme.palette.mode == "dark"
+              ? "linear-gradient(45deg, #343a40 30%, #343a40 90%)"
+              : "linear-gradient(45deg, #d6d3fc 30%, #ccedff 90%)",
             boxShadow: 3,
             overflowWrap: "break-word",
             wordBreak: "break-word",
             overflow: "hidden",
-          }}
+          })}
         >
           {isAssistant ? (
             content?.movies && content?.movies?.length != 0 ? (
               <Box
-                sx={{
-                  color: "#fff",
+                sx={(theme) => ({
+                  color: theme.palette.mode == "dark" ? "#fff" : "#000",
                   ...(visible ? fadeInUp : {}),
-                }}
+                })}
               >
                 <Typography
                   variant="body1"
                   color="white"
                   fontSize="17px"
                   gutterBottom
-                  sx={{ mb: 2 }}
+                  sx={(theme) => ({
+                    mb: 2,
+                    color: theme.palette.mode == "dark" ? "#fff" : "#000",
+                  })}
                 >
                   {content.intro}
                 </Typography>
@@ -105,6 +112,8 @@ export default function ChatBubble({ role, content, sending, error }) {
                     description={movie.description}
                     keywords={movie.keywords}
                     language={movie.language}
+                    videoKey={movie?.videoKey || null}
+                    videoSite={movie?.videoSite || null}
                   />
                 ))}
                 <Typography
@@ -112,7 +121,10 @@ export default function ChatBubble({ role, content, sending, error }) {
                   color="white"
                   fontSize="17px"
                   gutterBottom
-                  sx={{ mb: 2 }}
+                  sx={(theme) => ({
+                    mb: 2,
+                    color: theme.palette.mode == "dark" ? "#fff" : "#000",
+                  })}
                 >
                   {content.outro}
                 </Typography>
@@ -122,10 +134,10 @@ export default function ChatBubble({ role, content, sending, error }) {
                 variant="body1"
                 color="white"
                 fontSize="17px"
-                sx={{
-                  color: "#fff",
+                sx={(theme) => ({
+                  color: theme.palette.mode == "dark" ? "#fff" : "#000",
                   ...(visible ? fadeInUp : {}),
-                }}
+                })}
               >
                 {content}
               </Typography>
@@ -135,9 +147,9 @@ export default function ChatBubble({ role, content, sending, error }) {
               variant="body1"
               color="white"
               fontSize="17px"
-              sx={{
-                color: "#fff",
-              }}
+              sx={(theme) => ({
+                color: theme.palette.mode == "dark" ? "#fff" : "#000",
+              })}
             >
               {content}
             </Typography>

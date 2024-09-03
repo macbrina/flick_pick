@@ -15,25 +15,13 @@ import {
   Typography,
 } from "@mui/material";
 import Link from "next/link";
-
-const drawerWidth = 240;
+import ToggleColorMode from "@/app/_components/ToggleColorMode";
 
 function Header() {
   const { state, toggleDrawer } = useMovies();
 
   return (
-    <AppBar
-      position="absolute"
-      open={state.drawerOpen}
-      // sx={{
-      //   zIndex: (theme) => theme.zIndex.drawer + 1,
-      //   width: {
-      //     sm: state.drawerOpen ? `calc(100% - ${drawerWidth}px)` : "100%",
-      //   },
-      //   transition: "width 0.3s ease",
-      //   backgroundImage: "linear-gradient(to bottom, #2f2f2f, #2f2f2f)",
-      // }}
-    >
+    <AppBar position="fixed" open={state.drawerOpen}>
       <Toolbar>
         {!state.drawerOpen && (
           <IconButton
@@ -70,7 +58,8 @@ function Header() {
             </Link>
           </Stack>
 
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={2}>
+            <ToggleColorMode />
             <SignedOut>
               <Link href="/sign-in">
                 <Button variant="contained" color="primary">

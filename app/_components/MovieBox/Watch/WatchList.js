@@ -12,17 +12,25 @@ import {
 } from "@/app/_lib/data-service";
 import { useIsUserLoggedIn } from "@/app/_utils/auth";
 import { Box, CssBaseline, Grid, Toolbar } from "@mui/material";
-import { useEffect, useMemo, useOptimistic, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useState,
+} from "react";
 import { toast } from "react-toastify";
 import Spinner from "@/app/_components/Spinner";
+import { useNotification } from "@/app/_context/NotificationContext";
 
-function WatchMoviesList({ watchlist, onDeleteWatched }) {
+function WatchMoviesList({ watchlist, onDeleteWatched, pendingDeletes }) {
   return (
     <ul className="list">
       {watchlist.map((movie) => (
         <WatchMovie
           movie={movie}
           key={movie.id}
+          isPendingDelete={pendingDeletes.get(movie.id)}
           onDeleteWatched={onDeleteWatched}
         />
       ))}
@@ -34,19 +42,20 @@ function MovieBox({ children }) {
   const [isOpen, setIsOpen] = useState(true);
 
   return (
-    <div className="box">
+    <div className="box" style={{ height: "calc(100vh - 0.2rem - 3* 2.4rem)" }}>
       <button className="btn-toggle" onClick={() => setIsOpen((open) => !open)}>
         {isOpen ? "–" : "+"}
       </button>
 
-      {isOpen && children}
+      {isOpen && <div className="summary-container">{children}</div>}
     </div>
   );
 }
 
 function WatchList() {
   const { state, removeFromWatchList, loadWatchList, dispatch } = useMovies();
-
+  const notify = useNotification();
+  const [pendingDeletes, setPendingDeletes] = useState(new Map());
   const memoizedWatchListLength = useMemo(
     () => state.watchList.length,
     [state.watchList]
@@ -84,32 +93,51 @@ function WatchList() {
     fetchMovieHistory();
   }, [isLoggedIn, memoizedWatchListLength, dispatch, loadWatchList, userId]);
 
-  async function handleDeleteWatchList(id) {
-    try {
-      optimisticDelete(id);
-      await deleteWatchlistItem(id);
+  const handleDeleteWatchList = useCallback(
+    async (watchIds) => {
+      if (!isLoggedIn) {
+        notify("You need to be logged in to delete your watchlist..", "error");
+        return;
+      }
 
-      toast.success("Movie successfully deleted from watchlist.");
-      removeFromWatchList(id);
-    } catch (error) {
-      toast.error("Error deleting movie:", error);
-    }
-  }
+      setPendingDeletes((prev) => {
+        const updated = new Map(prev);
+        watchIds.forEach((id) => updated.set(id, true));
+        return updated;
+      });
+
+      try {
+        watchIds.forEach((id) => optimisticDelete(id));
+
+        watchIds.forEach((id) => {
+          removeFromWatchList(id);
+        });
+
+        await Promise.all(watchIds.map((id) => deleteWatchlistItem(id)));
+
+        watchIds.forEach((id) => {
+          setPendingDeletes((prev) => {
+            const updated = new Map(prev);
+            updated.delete(id);
+            return updated;
+          });
+        });
+        setSelectedIds(new Set());
+      } catch (error) {
+        notify("Error deleting movie:", "error");
+        setPendingDeletes((prev) => {
+          const updated = new Map(prev);
+          watchIds.forEach((id) => updated.delete(id));
+          return updated;
+        });
+      }
+    },
+    [isLoggedIn, optimisticDelete, removeFromWatchList]
+  );
 
   return (
-    <Box
-      sx={{
-        display: state.drawerOpen ? "flex" : "block",
-        transition: "width 0.3s ease",
-        height: "100vh",
-      }}
-    >
-      <CssBaseline />
-      <Header />
-      <Sidebar />
-
+    <Grid item xs={12} md={10} component="main" sx={{ p: 2, height: "100%" }}>
       <Box
-        component="main"
         sx={{
           p: 3,
           maxWidth: "65rem",
@@ -118,20 +146,19 @@ function WatchList() {
           marginRight: "auto",
           display: "flex",
           flexDirection: "column",
-          height: "100vh",
+          height: "100%",
           //   overflow: "hidden",
           transition: "margin-left 0.3s ease",
         }}
       >
-        <Toolbar />
-
+        <Toolbar sx={{ minHeight: "20px !important" }} />
         <Grid
           container
-          spacing={3}
+          spacing={2}
           sx={{
-            marginTop: "2.4rem",
+            marginTop: 2,
             flexGrow: 1,
-            height: "calc(100vh - 7.2rem - 3* 2.4rem)",
+            height: "calc(100vh - 0.2rem - 3* 2.4rem)",
           }}
         >
           <Grid item xs={12}>
@@ -148,11 +175,16 @@ function WatchList() {
                   <Spinner />
                 ) : (
                   <>
-                    <WatchSummary watchlist={optimisticWatchList} />
-                    <WatchMoviesList
-                      watchlist={optimisticWatchList}
-                      onDeleteWatched={handleDeleteWatchList}
-                    />
+                    <div className="summary-container">
+                      <WatchSummary watchlist={optimisticWatchList} />
+                      <div className="list-container">
+                        <WatchMoviesList
+                          watchlist={optimisticWatchList}
+                          pendingDeletes={pendingDeletes}
+                          onDeleteWatched={handleDeleteWatchList}
+                        />
+                      </div>
+                    </div>
                   </>
                 )}
               </MovieBox>
@@ -160,7 +192,7 @@ function WatchList() {
           </Grid>
         </Grid>
       </Box>
-    </Box>
+    </Grid>
   );
 }
 

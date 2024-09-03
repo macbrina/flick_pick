@@ -13,15 +13,7 @@ const MovieLinkSubmissionForm = ({ onClose }) => {
 
     if (url.trim() == "") return;
 
-    if (
-      !url.startsWith(
-        "https://www.themoviedb.org/movie" ||
-          !url.startsWith(
-            "https://themoviedb.org/movie" ||
-              !url.startsWith("https://www.themoviedb.org/movie")
-          )
-      )
-    ) {
+    if (!url.includes("themoviedb.org")) {
       toast.error(
         "Invalid URL. Please enter a valid The Movie Database page URL."
       );

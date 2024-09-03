@@ -19,17 +19,26 @@ import {
   Skeleton,
   Stack,
   Typography,
+  useTheme,
 } from "@mui/material";
 import { isEmptyObj } from "openai/core";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import ShareModal from "./ShareModal";
-import { generateUniqueId, getVideoUrl } from "@/app/_utils/utilities";
+import {
+  generateUniqueId,
+  GENREIDSTONAME,
+  getVideoUrl,
+} from "@/app/_utils/utilities";
+import { LANGUAGEMAPPING } from "@/app/_utils/constants";
+import { useNotification } from "@/app/_context/NotificationContext";
+import AuthDialog from "../Auth/AuthDialog";
 
 function MovieDetails({ selectedId, onCloseMovie }) {
+  const theme = useTheme();
   const { isLoggedIn, userId, user } = useIsUserLoggedIn();
-  const { addToHistoryList, state, addToWatchList, addToPostList } =
-    useMovies();
+  const { addToHistoryList, state, addToWatchList, addNewPost } = useMovies();
+  const { notify } = useNotification();
   const [movie, setMovie] = useState({});
   const [credits, setCredits] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +53,17 @@ function MovieDetails({ selectedId, onCloseMovie }) {
   const [isAddingHistory, setIsAddingHistory] = useState(false);
   const [isModalOpen, setModalOpen] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [pineconeData, setPinecondata] = useState({});
+  const [uploadData, setUploadData] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const handleOpenDialog = () => {
+    setDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+  };
 
   useEffect(
     function () {
@@ -66,6 +86,9 @@ function MovieDetails({ selectedId, onCloseMovie }) {
   const {
     title,
     release_date,
+    last_episode_to_air,
+    name,
+    first_air_date,
     poster_path,
     runtime,
     vote_average,
@@ -98,7 +121,7 @@ function MovieDetails({ selectedId, onCloseMovie }) {
         .slice(0, 5);
       setDirectors(slicedDirectors);
     }
-  }, [credits.length]);
+  }, [credits.length, credits.crew]);
 
   async function handleAddHistory() {
     if (!isLoggedIn) {
@@ -108,12 +131,14 @@ function MovieDetails({ selectedId, onCloseMovie }) {
 
     const newWatchedMovie = {
       userId: userId,
+      postId: null,
       movieId: selectedId,
-      title,
-      release_date,
+      movieType: state.selectedMovieType,
+      title: title || name,
+      release_date: release_date || first_air_date,
       poster_path,
       tmdbRating: Number(vote_average),
-      runtime: Number(runtime),
+      runtime: Number(runtime || last_episode_to_air?.runtime),
       userRating,
       countRatingDecisions: countRef.current,
     };
@@ -139,12 +164,14 @@ function MovieDetails({ selectedId, onCloseMovie }) {
 
     const newWatchedMovie = {
       userId: userId,
+      postId: null,
       movieId: selectedId,
-      title,
-      release_date,
+      movieType: state.selectedMovieType,
+      title: title || name,
+      release_date: release_date || first_air_date,
       poster_path,
       tmdbRating: Number(vote_average),
-      runtime: Number(runtime),
+      runtime: Number(runtime || last_episode_to_air?.runtime),
     };
 
     setIsAddingList(true);
@@ -181,16 +208,20 @@ function MovieDetails({ selectedId, onCloseMovie }) {
     }
 
     setIsSharing(true);
+    handleCloseModal();
+
+    notify("Post is being uploaded...", "info");
 
     let movieVideo;
-    let site;
-    let keyId;
 
     try {
       const res = await fetch(`/api/movievideo`, {
         method: "POST",
         "Content-Type": "application/json",
-        body: JSON.stringify({ movieId: selectedId }),
+        body: JSON.stringify({
+          movieId: selectedId,
+          type: state.selectedMovieType,
+        }),
       });
 
       if (!res.ok) {
@@ -199,9 +230,7 @@ function MovieDetails({ selectedId, onCloseMovie }) {
       }
       const data = await res.json();
 
-      movieVideo = getVideoUrl(data?.data?.site, data?.data?.key);
-      site = data?.data?.site;
-      keyId = data?.data?.key;
+      movieVideo = getVideoUrl(data.data?.videoSite, data.data?.videoKey) || "";
 
       const postData = {
         postId: generateUniqueId(),
@@ -209,28 +238,85 @@ function MovieDetails({ selectedId, onCloseMovie }) {
         username: user.username,
         avatarUrl: user.imageUrl || "",
         movieId: selectedId,
-        movieTitle: movie.title,
-        movieYear: movie.release_date,
+        language: LANGUAGEMAPPING[movie.original_language] || "Unknown",
+        genres: movie.genres.map((genre) => GENREIDSTONAME(genre.id)),
+        description: movie.overview || "",
+        rating: movie.vote_average || 0,
+        movieTitle: movie.title || movie.name,
+        movieYear: movie.release_date || movie.first_air_date || "",
         movieImage: movie.poster_path,
-        site,
-        keyId,
-        movieVideo,
+        ...data.data,
         postContent,
-        type: "movie",
+        movieVideo,
+        movieType: state.selectedMovieType,
+        type: state.selectedMovieType,
         source: "tmdb",
+        runtime: movie?.runtime || movie.last_episode_to_air?.runtime || 0,
         likesCount: 0,
         commentsCount: 0,
+        watchListCount: 0,
+        historyCount: 0,
       };
 
+      const pineconeData = {
+        id: String(movie.id),
+        title: movie.title || movie.name,
+        image: `https://image.tmdb.org/t/p/w500${movie.poster_path}`,
+        rating: movie.vote_average,
+        genres: movie.genres.map((genre) => GENREIDSTONAME(genre.id)),
+        description: movie.overview,
+        keywords: [
+          movie.title || movie.name,
+          ...movie.genres.map((genre) => GENREIDSTONAME(genre.id)),
+        ],
+        language: LANGUAGEMAPPING[movie.original_language] || "Unknown",
+        movieType: state.selectedMovieType,
+        type: state.selectedMovieType,
+        source: "tmdb",
+        ...data.data,
+        postContent,
+      };
+
+      // setPinecondata(pineconeData);
+      // setUploadData(true);
       await addPost(postData);
-      addToPostList(postData);
-      toast.success("Post shared successfully!");
+      addNewPost(postData);
+      notify("Post shared successfully!", "success");
     } catch (error) {
       toast.error("Error fetching movie details:");
     } finally {
       setIsSharing(false);
     }
   };
+
+  function resetState() {
+    setActors([]);
+    setDirectors([]);
+    setMovie({});
+    setCredits({});
+    setModalOpen(false);
+    setPinecondata({});
+    setUploadData(false);
+  }
+
+  useEffect(() => {
+    const uploadPineData = async () => {
+      try {
+        await fetch(`/api/postupload`, {
+          method: "POST",
+          "Content-Type": "application/json",
+          body: JSON.stringify({ pineconeData }),
+        });
+      } catch (error) {
+      } finally {
+        setPinecondata({});
+        setUploadData(false);
+      }
+    };
+    if (uploadData && !isEmptyObj(pineconeData)) {
+      uploadPineData();
+    }
+  }, [uploadData, pineconeData]);
 
   useKey("Escape", onCloseMovie);
 
@@ -241,8 +327,15 @@ function MovieDetails({ selectedId, onCloseMovie }) {
           const res = await fetch(`/api/search`, {
             method: "POST",
             "Content-Type": "application/json",
-            body: JSON.stringify({ movieId: selectedId }),
+            body: JSON.stringify({
+              movieId: selectedId,
+              type: state.selectedMovieType,
+            }),
           });
+
+          if (!res.ok) {
+            throw new Error("Failed to fetch movie details.");
+          }
           const data = await res.json();
           setMovie(data.data.movieData);
           setCredits(data.data.creditsData);
@@ -254,7 +347,7 @@ function MovieDetails({ selectedId, onCloseMovie }) {
       }
       getMovieDetails();
     },
-    [selectedId]
+    [selectedId, state.selectedMovieType]
   );
 
   useEffect(() => {
@@ -264,7 +357,10 @@ function MovieDetails({ selectedId, onCloseMovie }) {
           const res = await fetch(`/api/analysis`, {
             method: "POST",
             "Content-Type": "application/json",
-            body: JSON.stringify({ movieId: selectedId }),
+            body: JSON.stringify({
+              movieId: selectedId,
+              type: state.selectedMovieType,
+            }),
           });
           const data = await res.json();
           if (data.success) {
@@ -280,18 +376,18 @@ function MovieDetails({ selectedId, onCloseMovie }) {
       }
       getMovieSentiment();
     }
-  }, [selectedId, movie]);
+  }, [selectedId, movie, state.selectedMovieType]);
 
   useEffect(
     function () {
       if (!title) return;
-      document.title = `Movie | ${title}`;
+      document.title = `Movie | ${title || name}`;
 
       return function () {
         document.title = "FlickPick";
       };
     },
-    [title]
+    [title, name]
   );
 
   return (
@@ -314,11 +410,10 @@ function MovieDetails({ selectedId, onCloseMovie }) {
               alt={`Poster of ${movie} movie`}
             />
             <div className="details-overview">
-              <Typography variant="h5" sx={{ color: "#94a6b8" }}>
-                {title}
-              </Typography>
+              <Typography variant="h5">{title || name}</Typography>
               <Typography variant="body1">
-                {release_date} &bull; {runtime} min
+                {release_date || first_air_date} &bull;{" "}
+                {runtime || last_episode_to_air?.runtime || 0} min
               </Typography>
               <Stack
                 spacing={1}
@@ -341,10 +436,13 @@ function MovieDetails({ selectedId, onCloseMovie }) {
                   {!isEmptyObj(sentimentAnalysis) && (
                     <Typography
                       variant="body3"
+                      fontWeight="bold"
                       sx={{
                         color:
                           sentimentAnalysis.overallSentimentType == "Positive"
-                            ? "#17E9AA"
+                            ? theme.palette.mode == "dark"
+                              ? "#17E9AA"
+                              : "#0C7153"
                             : sentimentAnalysis.overallSentimentType ==
                               "Negative"
                             ? "#F83A3A"
@@ -381,13 +479,18 @@ function MovieDetails({ selectedId, onCloseMovie }) {
                     <Button
                       variant="contained"
                       className="btn-add"
-                      onClick={handleAddWatchList}
+                      onClick={() => {
+                        if (isLoggedIn) {
+                          handleAddWatchList();
+                        } else {
+                          handleOpenDialog();
+                        }
+                      }}
                       disabled={isAddingList}
                     >
                       {isAddingList ? (
                         <>
-                          <CircularProgress size={20} color="inherit" />{" "}
-                          Adding...
+                          <CircularProgress size={20} color="inherit" />
                         </>
                       ) : (
                         "+ Add to Watchlist"
@@ -402,7 +505,13 @@ function MovieDetails({ selectedId, onCloseMovie }) {
                 <Button
                   variant="contained"
                   className="btn-add"
-                  onClick={handleOpenModal}
+                  onClick={() => {
+                    if (isLoggedIn) {
+                      handleOpenModal();
+                    } else {
+                      handleOpenDialog();
+                    }
+                  }}
                 >
                   🚀 Share to Feed
                 </Button>
@@ -419,16 +528,23 @@ function MovieDetails({ selectedId, onCloseMovie }) {
 
           <section>
             <Box
-              sx={{
+              sx={(theme) => ({
                 padding: "2rem 2.4rem",
-                backgroundColor: "var(--color-background-100)",
+                backgroundColor:
+                  theme.palette.mode == "dark"
+                    ? "var(--color-background-100)"
+                    : "var(--color-background-white-100)",
                 borderRadius: "0.9rem",
-              }}
+              })}
             >
               <div className="rating">
                 {!isWatched ? (
                   <>
+                    <Typography variant="h6">Rate this movie:</Typography>
                     <StarRating
+                      color={
+                        theme.palette.mode == "dark" ? "#fcc419" : "#6741D9"
+                      }
                       maxRating={10}
                       size={24}
                       onSetRating={setUserRating}
@@ -450,7 +566,13 @@ function MovieDetails({ selectedId, onCloseMovie }) {
                           <Button
                             variant="contained"
                             className="btn-add"
-                            onClick={handleAddHistory}
+                            onClick={() => {
+                              if (isLoggedIn) {
+                                handleAddHistory();
+                              } else {
+                                handleOpenDialog();
+                              }
+                            }}
                             disabled={isAddingHistory}
                           >
                             {isAddingHistory ? (
@@ -468,7 +590,9 @@ function MovieDetails({ selectedId, onCloseMovie }) {
                   </>
                 ) : (
                   <Typography variant="body1">
-                    You rated with movie {watchedUserRating} ⭐️
+                    You rated with{" "}
+                    {state.selectedMovieType == "movie" ? "movie" : "Tv Show"}{" "}
+                    {watchedUserRating} ⭐️
                   </Typography>
                 )}
               </div>
@@ -498,13 +622,17 @@ function MovieDetails({ selectedId, onCloseMovie }) {
               <Typography variant="body1" fontWeight="bold">
                 Directed by:
               </Typography>
-              {directors.map((director, index) => (
-                <Typography variant="body1" key={index}>
-                  {director.name},
-                </Typography>
-              ))}{" "}
+              {directors.length > 0
+                ? directors.map((director, index) => (
+                    <Typography variant="body1" key={index}>
+                      {director.name},
+                    </Typography>
+                  ))
+                : "N/A"}
             </Stack>
           </section>
+
+          <AuthDialog open={dialogOpen} onClose={handleCloseDialog} />
         </>
       )}
     </div>

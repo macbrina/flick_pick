@@ -19,6 +19,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { getDownloadURL, listAll, ref, uploadBytes } from "firebase/storage";
+import { PAGE_SIZE } from "@/app/_utils/constants";
 
 export const fetchAllAvatars = async () => {
   try {
@@ -49,7 +50,11 @@ export const saveUserAvatar = async (userId, avatarUrl) => {
   }
 };
 
-export const checkAndAddUserToFirestore = async (userId, userData) => {
+export const checkAndAddUserToFirestore = async (
+  userId,
+  userData,
+  subscriptionData
+) => {
   try {
     const userDocRef = doc(db, "users", userId);
     const userDoc = await getDoc(userDocRef);
@@ -58,11 +63,53 @@ export const checkAndAddUserToFirestore = async (userId, userData) => {
       await setDoc(userDocRef, userData, { merge: true });
     } else {
       await setDoc(userDocRef, userData);
+      const subscriptionRef = doc(db, "subscriptions", subscriptionData.id);
+      await setDoc(subscriptionRef, subscriptionData, { merge: true });
     }
   } catch (error) {
     throw error;
   }
 };
+
+export async function checkUserExistsByEmail(email) {
+  const usersRef = collection(db, "users");
+  const q = query(usersRef, where("email", "==", email));
+
+  const querySnapshot = await getDocs(q);
+
+  return !querySnapshot.empty;
+}
+
+export async function checkUsernameExists(username) {
+  const usersRef = collection(db, "users");
+  const q = query(usersRef, where("username", "==", username));
+
+  const querySnapshot = await getDocs(q);
+
+  return !querySnapshot.empty;
+}
+
+export async function addSocialAuthUser(userId, userData, subscriptionData) {
+  const usersRef = collection(db, "users", userId);
+  try {
+    await setDoc(usersRef, userData);
+    const subscriptionRef = doc(db, "subscriptions", subscriptionData.id);
+    await setDoc(subscriptionRef, subscriptionData, { merge: true });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function addUser(userId, userData, subscriptionData) {
+  const usersRef = collection(db, "users", userId);
+  try {
+    await setDoc(usersRef, userData);
+    const subscriptionRef = doc(db, "subscriptions", subscriptionData.id);
+    await setDoc(subscriptionRef, subscriptionData, { merge: true });
+  } catch (error) {
+    throw error;
+  }
+}
 
 export const getUserPartialData = async (userId) => {
   const userDocRef = doc(db, "users", userId);
@@ -112,13 +159,22 @@ export const getUserProfileData = async (userId) => {
   }
 };
 
-export const getNewsfeedPosts = async () => {
+export const getNewsfeedPosts = async (lastPostTimestamp) => {
   try {
-    const postsQuery = query(
+    let postsQuery = query(
       collection(db, "posts"),
       orderBy("createdAt", "desc"),
-      limit(50)
+      limit(PAGE_SIZE)
     );
+
+    if (lastPostTimestamp) {
+      postsQuery = query(
+        collection(db, "posts"),
+        orderBy("createdAt", "desc"),
+        startAfter(lastPostTimestamp),
+        limit(PAGE_SIZE)
+      );
+    }
 
     const postsSnapshot = await getDocs(postsQuery);
     const posts = postsSnapshot.docs.map((doc) => {
@@ -133,12 +189,21 @@ export const getNewsfeedPosts = async () => {
             "https://firebasestorage.googleapis.com/v0/b/flickpick-3210d.appspot.com/o/avatars%2FadventurerNeutral-1724685234808.avif?alt=media&token=3f1b95be-cd09-4fdc-b76d-0e66c3584221",
         },
         movie: {
+          userId: data.userId,
+          postId: data.postId,
           title: data.movieTitle || "Untitled",
-          imageUrl: data.movieImage,
+          imageUrl: `https://image.tmdb.org/t/p/w500${data.movieImage}`,
           description: data.postContent,
           videoUrl: data.movieVideo || "",
           likesCount: data.likesCount || 0,
           commentsCount: data.commentsCount || 0,
+          watchListCount: data.watchListCount || 0,
+          historyCount: data.historyCount || 0,
+          movieId: data.movieId,
+          movieType: data.movieType,
+          release_date: data.movieYear,
+          tmdbRating: data.rating,
+          runtime: data.runtime,
         },
         postTime: data.createdAt ? data.createdAt.toDate() : new Date(),
       };
@@ -149,6 +214,87 @@ export const getNewsfeedPosts = async () => {
     console.error("Error fetching newsfeed posts:", error);
     throw error;
   }
+};
+
+export const subscribeToNewPosts = (
+  callback,
+  userId = null,
+  limitPosts = PAGE_SIZE
+) => {
+  const postsQuery = query(
+    collection(db, "posts"),
+    orderBy("createdAt", "desc"),
+    limit(limitPosts)
+  );
+
+  return onSnapshot(postsQuery, async (snapshot) => {
+    const posts = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+        let userLiked = false;
+        let userWatch = false;
+        let userHistory = false;
+
+        if (userId) {
+          // Check if the user liked this post
+          const likesQuery = query(
+            collection(db, "likes"),
+            where("postId", "==", data.postId),
+            where("userId", "==", userId)
+          );
+          const watchListQuery = query(
+            collection(db, "watchlist"),
+            where("postId", "==", data.postId),
+            where("userId", "==", userId)
+          );
+          const historyQuery = query(
+            collection(db, "movieHistory"),
+            where("postId", "==", data.postId),
+            where("userId", "==", userId)
+          );
+          const likeSnapshot = await getDocs(likesQuery);
+          const watchListSnapshot = await getDocs(watchListQuery);
+          const historySnapshot = await getDocs(historyQuery);
+          userLiked = !likeSnapshot.empty;
+          userWatch = !watchListSnapshot.empty;
+          userHistory = !historySnapshot.empty;
+        }
+
+        return {
+          id: doc.id,
+          postId: data.postId,
+          userLiked,
+          userWatch,
+          userHistory,
+          user: {
+            username: data.username,
+            avatarUrl:
+              data.avatarUrl ||
+              "https://firebasestorage.googleapis.com/v0/b/flickpick-3210d.appspot.com/o/avatars%2FadventurerNeutral-1724685234808.avif?alt=media&token=3f1b95be-cd09-4fdc-b76d-0e66c3584221",
+          },
+          movie: {
+            userId: data.userId,
+            postId: data.postId,
+            title: data.movieTitle || "Untitled",
+            imageUrl: `https://image.tmdb.org/t/p/w500${data.movieImage}`,
+            description: data.postContent,
+            videoUrl: data.movieVideo || "",
+            likesCount: data.likesCount || 0,
+            commentsCount: data.commentsCount || 0,
+            watchListCount: data.watchListCount || 0,
+            historyCount: data.historyCount || 0,
+            movieId: data.movieId,
+            movieType: data.movieType,
+            release_date: data.movieYear,
+            tmdbRating: data.rating,
+            runtime: data.runtime,
+          },
+          postTime: data.createdAt ? data.createdAt.toDate() : new Date(),
+        };
+      })
+    );
+    callback(posts);
+  });
 };
 
 export async function getPostComments(
@@ -310,15 +456,53 @@ export const addPost = async (post) => {
   }
 };
 
-export const addChatMessage = async (message) => {
+export const editPost = async (post) => {
+  if (!post || !post.postId || !post.description) {
+    throw new Error("Invalid post data. Post ID and content are required.");
+  }
   try {
-    const chatRef = await addDoc(collection(db, "chatHistory"), {
-      ...message,
-      createdAt: Timestamp.now(),
+    const postRef = doc(db, "posts", post.postId);
+    await updateDoc(postRef, {
+      postContent: post.description,
     });
-    return chatRef.id;
+    return true;
   } catch (error) {
-    console.error("Error adding chat message:", error);
+    console.error("Error editing post:", error);
+    throw error;
+  }
+};
+export const saveChatHistory = async (userId, chatEntry) => {
+  try {
+    const chatDocRef = doc(db, "chatHistory", userId);
+
+    const chatDoc = await getDoc(chatDocRef);
+
+    let updatedChat = [];
+
+    if (chatDoc.exists()) {
+      const existingChat = chatDoc.data().messages || [];
+      updatedChat = [...existingChat, ...chatEntry.messages];
+    } else {
+      updatedChat = chatEntry.messages;
+    }
+
+    await setDoc(chatDocRef, {
+      userId: userId,
+      messages: updatedChat,
+      updatedAt: chatEntry.updatedAt,
+    });
+  } catch (error) {
+    console.error("Error saving chat history:", error);
+    throw error;
+  }
+};
+
+export const deleteChatHistory = async (userId) => {
+  try {
+    const commentRef = doc(db, "chatHistory", userId);
+    await deleteDoc(commentRef);
+  } catch (error) {
+    console.error("Error deleting chat:", error);
     throw error;
   }
 };
@@ -388,7 +572,28 @@ export const deleteComment = async (commentId, postId) => {
 export const deletePost = async (postId) => {
   try {
     const postRef = doc(db, "posts", postId);
+
     await deleteDoc(postRef);
+
+    const commentsQuery = query(
+      collection(db, "comments"),
+      where("postId", "==", postId)
+    );
+    const commentsSnapshot = await getDocs(commentsQuery);
+    commentsSnapshot.forEach(async (commentDoc) => {
+      await deleteDoc(commentDoc.ref);
+    });
+
+    const likesQuery = query(
+      collection(db, "likes"),
+      where("postId", "==", postId)
+    );
+    const likesSnapshot = await getDocs(likesQuery);
+    likesSnapshot.forEach(async (likeDoc) => {
+      await deleteDoc(likeDoc.ref);
+    });
+
+    console.log("Post deleted successfully!");
   } catch (error) {
     console.error("Error deleting post:", error);
     throw error;
@@ -441,9 +646,40 @@ export const hasUserLikedPost = async (userId, postId) => {
   }
 };
 
+export const hasUserWatchListPost = async (userId, postId) => {
+  try {
+    const q = query(
+      collection(db, "watchlist"),
+      where("userId", "==", userId),
+      where("postId", "==", postId)
+    );
+
+    const snapshot = await getDocs(q);
+    return !snapshot.empty;
+  } catch (error) {
+    console.error("Error checking like status:", error);
+    throw error;
+  }
+};
+
+export const hasUserHistoryPost = async (userId, postId) => {
+  try {
+    const q = query(
+      collection(db, "movieHistory"),
+      where("userId", "==", userId),
+      where("postId", "==", postId)
+    );
+
+    const snapshot = await getDocs(q);
+    return !snapshot.empty;
+  } catch (error) {
+    console.error("Error checking like status:", error);
+    throw error;
+  }
+};
+
 export const toggleLike = async (userId, postId) => {
   try {
-    // Check if the user has already liked the post
     const q = query(
       collection(db, "likes"),
       where("userId", "==", userId),
@@ -452,19 +688,22 @@ export const toggleLike = async (userId, postId) => {
 
     const snapshot = await getDocs(q);
 
+    const postRef = doc(db, "posts", postId);
+    const postDoc = await getDoc(postRef);
+    const currentLikes = postDoc.exists() ? postDoc.data().likesCount : 0;
+
     if (!snapshot.empty) {
-      // User has already liked the post, so remove the like
-      const likeId = snapshot.docs[0].id; // Get the like ID
-      const likeRef = doc(db, "likes", likeId);
-      await deleteDoc(likeRef);
+      if (currentLikes > 0) {
+        const likeId = snapshot.docs[0].id;
+        const likeRef = doc(db, "likes", likeId);
+        await deleteDoc(likeRef);
 
-      // Decrement the like count in the post
-      const postRef = doc(db, "posts", postId);
-      await updateDoc(postRef, {
-        likesCount: increment(-1),
-      });
+        await updateDoc(postRef, {
+          likesCount: increment(-1),
+        });
+      }
 
-      console.log("Like removed");
+      return "remove";
     } else {
       await addDoc(collection(db, "likes"), {
         userId,
@@ -477,7 +716,7 @@ export const toggleLike = async (userId, postId) => {
         likesCount: increment(1),
       });
 
-      console.log("Like added");
+      return "add";
     }
   } catch (error) {
     console.error("Error toggling like:", error);
@@ -485,35 +724,94 @@ export const toggleLike = async (userId, postId) => {
   }
 };
 
-// export const getUserData = async (user) => {
-//   try {
-//     const q = query(collection(db, "users"), where("userId", "==", user.id));
-//     const userSnapshot = await getDocs(q);
+export const toggleHistory = async (post) => {
+  try {
+    const q = query(
+      collection(db, "movieHistory"),
+      where("userId", "==", post.userId),
+      where("postId", "==", post.postId)
+    );
 
-//     if (userSnapshot.empty) {
-//       throw new Error("No user found with the given ID");
-//     }
+    const snapshot = await getDocs(q);
 
-//     const userDoc = userSnapshot.docs[0];
-//     const userData = userDoc.data();
+    const postRef = doc(db, "posts", post.postId);
+    const postDoc = await getDoc(postRef);
+    const currentHistories = postDoc.exists() ? postDoc.data().historyCount : 0;
 
-//     if (userData.subscriptionId) {
-//       const moviesRef = doc(db, "moviecollections", userData.id);
-//       const moviesSnapshot = await getDoc(moviesRef);
+    if (!snapshot.empty) {
+      if (currentHistories > 0) {
+        const historyId = snapshot.docs[0].id;
+        const historyRef = doc(db, "movieHistory", historyId);
+        await deleteDoc(historyRef);
 
-//       if (moviesSnapshot.exists()) {
-//         const moviesData = moviesSnapshot.data();
-//         return {
-//           ...userData,
-//           movies: moviesData,
-//         };
-//       } else {
-//         return { ...userData, movies: "No movies found" };
-//       }
-//     } else {
-//       return userData;
-//     }
-//   } catch (error) {
-//     throw error;
-//   }
-// };
+        await updateDoc(postRef, {
+          historyCount: increment(-1),
+        });
+      }
+
+      return "remove";
+    } else {
+      await addDoc(collection(db, "movieHistory"), {
+        ...post,
+        createdAt: Timestamp.now(),
+      });
+
+      const postRef = doc(db, "posts", post.postId);
+      await updateDoc(postRef, {
+        historyCount: increment(1),
+      });
+
+      return "add";
+    }
+  } catch (error) {
+    console.error("Error toggling history:", error);
+    throw error;
+  }
+};
+
+export const toggleWatchList = async (post) => {
+  try {
+    const q = query(
+      collection(db, "watchlist"),
+      where("userId", "==", post.userId),
+      where("postId", "==", post.postId)
+    );
+
+    const snapshot = await getDocs(q);
+
+    const postRef = doc(db, "posts", post.postId);
+    const postDoc = await getDoc(postRef);
+    const currentWatchlist = postDoc.exists()
+      ? postDoc.data().watchListCount
+      : 0;
+
+    if (!snapshot.empty) {
+      if (currentWatchlist > 0) {
+        const watchlistId = snapshot.docs[0].id;
+        const watchlistRef = doc(db, "watchlist", watchlistId);
+        await deleteDoc(watchlistRef);
+
+        await updateDoc(postRef, {
+          watchListCount: increment(-1),
+        });
+      }
+
+      return "remove";
+    } else {
+      await addDoc(collection(db, "watchlist"), {
+        ...post,
+        createdAt: Timestamp.now(),
+      });
+
+      const postRef = doc(db, "posts", post.postId);
+      await updateDoc(postRef, {
+        watchListCount: increment(1),
+      });
+
+      return "add";
+    }
+  } catch (error) {
+    console.error("Error toggling watchlist:", error);
+    throw error;
+  }
+};

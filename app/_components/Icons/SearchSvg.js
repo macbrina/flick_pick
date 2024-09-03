@@ -12,13 +12,13 @@ function SearchSvg(props) {
       <path
         fill="none"
         d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
-        stroke="#94a6b8"
+        stroke="currentColor"
         strokeWidth="1.5"
       />
       <path
         fill="none"
         d="M14 14L16 16"
-        stroke="#94a6b8"
+        stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -26,7 +26,7 @@ function SearchSvg(props) {
       <path
         fill="none"
         d="M15 11.5C15 13.433 13.433 15 11.5 15C9.567 15 8 13.433 8 11.5C8 9.567 9.567 8 11.5 8C13.433 8 15 9.567 15 11.5Z"
-        stroke="#94a6b8"
+        stroke="currentColor"
         strokeWidth="1.5"
       />
     </SvgIcon>

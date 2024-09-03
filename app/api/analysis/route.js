@@ -1,15 +1,16 @@
 import analyzeSentiment from "@/app/_lib/sentiment";
+import { fetchWithRetry } from "@/app/_utils/fetchWithRetry";
 
 const { NextResponse } = require("next/server");
 
 const apiKey = process.env.TMDB_ACCESS_TOKEN;
 
 export async function POST(req) {
-  const { movieId } = await req.json();
+  const { movieId, type } = await req.json();
 
   try {
-    const response = await fetch(
-      `https://api.themoviedb.org/3/movie/${movieId}/reviews`,
+    const response = await fetchWithRetry(
+      `https://api.themoviedb.org/3/${type}/${movieId}/reviews`,
       {
         method: "GET",
         headers: {
@@ -21,7 +22,6 @@ export async function POST(req) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Error response:", errorText);
       throw new Error(errorText || "Failed to fetch movies");
     }
 
@@ -33,7 +33,9 @@ export async function POST(req) {
       return new NextResponse(
         JSON.stringify({
           success: false,
-          message: "No reviews found for this movie.",
+          message: `No reviews found for this ${
+            type == "movie" ? "movie" : "Tv Show"
+          }.`,
         }),
         { status: 404 }
       );

@@ -1,19 +1,21 @@
+import { fetchWithRetry } from "@/app/_utils/fetchWithRetry";
 import { NextResponse } from "next/server";
 
 const apiKey = process.env.TMDB_ACCESS_TOKEN;
 
 export async function POST(req) {
-  const { movieName, genre, language, releaseYear, movieId } = await req.json();
+  const { movieName, genre, language, releaseYear, movieId, type } =
+    await req.json();
 
   try {
     let url = `https://api.themoviedb.org/3/`;
 
-    if (movieId) {
-      url += `movie/${movieId}`;
-    } else if (movieName) {
-      url += `search/movie?query=${encodeURIComponent(movieName)}`;
+    if (movieId && type) {
+      url += `${type}/${movieId}`;
+    } else if (movieName && type === "movie") {
+      url += `search/${type}?query=${encodeURIComponent(movieName)}`;
     } else {
-      url += `discover/movie?sort_by=popularity.desc`;
+      url += `discover/${type}?sort_by=popularity.desc`;
 
       if (genre) {
         url += `&with_genres=${genre}`;
@@ -28,7 +30,7 @@ export async function POST(req) {
       }
     }
 
-    const response = await fetch(url, {
+    const response = await fetchWithRetry(url, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -44,10 +46,10 @@ export async function POST(req) {
 
     let creditsData = null;
 
-    if (movieId) {
-      const creditsUrl = `https://api.themoviedb.org/3/movie/${movieId}/credits`;
+    if (movieId && type) {
+      const creditsUrl = `https://api.themoviedb.org/3/${type}/${movieId}/credits`;
 
-      const creditsResponse = await fetch(creditsUrl, {
+      const creditsResponse = await fetchWithRetry(creditsUrl, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -68,7 +70,12 @@ export async function POST(req) {
     const data = await response.json();
 
     if (data || data.results) {
-      const movieData = data.results || data;
+      const mData = data.results || data;
+
+      const movieData = Array.isArray(mData)
+        ? mData.map((item) => ({ ...item, movieType: type }))
+        : { ...mData, movieType: type };
+
       return new NextResponse(
         JSON.stringify({ success: true, data: { movieData, creditsData } }),
         { status: 200 }
@@ -77,6 +84,7 @@ export async function POST(req) {
       throw new Error("No results found");
     }
   } catch (error) {
+    console.log("error", error);
     return new NextResponse(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500 }

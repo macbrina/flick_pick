@@ -60,7 +60,9 @@ export async function POST() {
           description: movie.description,
           keywords: movie.keywords,
           language: movie.language,
-          video: movie.video,
+          videoKey: movie.video.key,
+          videoSite: movie.video.site,
+          movieType: "movie",
         },
       });
 

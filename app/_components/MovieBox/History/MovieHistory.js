@@ -34,12 +34,12 @@ function MovieBox({ children }) {
   const [isOpen, setIsOpen] = useState(true);
 
   return (
-    <div className="box">
+    <div className="box" style={{ height: "calc(100vh - 0.2rem - 3* 2.4rem)" }}>
       <button className="btn-toggle" onClick={() => setIsOpen((open) => !open)}>
         {isOpen ? "–" : "+"}
       </button>
 
-      {isOpen && children}
+      {isOpen && <div className="summary-container">{children}</div>}
     </div>
   );
 }
@@ -102,19 +102,8 @@ function MovieHistory() {
   }
 
   return (
-    <Box
-      sx={{
-        display: state.drawerOpen ? "flex" : "block",
-        transition: "width 0.3s ease",
-        height: "100vh",
-      }}
-    >
-      <CssBaseline />
-      <Header />
-      <Sidebar />
-
+    <Grid item xs={12} md={10} component="main" sx={{ p: 2, height: "100%" }}>
       <Box
-        component="main"
         sx={{
           p: 3,
           maxWidth: "65rem",
@@ -123,20 +112,19 @@ function MovieHistory() {
           marginRight: "auto",
           display: "flex",
           flexDirection: "column",
-          height: "100vh",
+          height: "100%",
           //   overflow: "hidden",
           transition: "margin-left 0.3s ease",
         }}
       >
-        <Toolbar />
-
+        <Toolbar sx={{ minHeight: "20px !important" }} />
         <Grid
           container
-          spacing={3}
+          spacing={2}
           sx={{
-            marginTop: "2.4rem",
+            marginTop: 2,
             flexGrow: 1,
-            height: "calc(100vh - 7.2rem - 3* 2.4rem)",
+            height: "calc(100vh - 0.2rem - 3* 2.4rem)",
           }}
         >
           <Grid item xs={12}>
@@ -153,11 +141,15 @@ function MovieHistory() {
                   <Spinner />
                 ) : (
                   <>
-                    <WatchedSummary watched={optimisticHistoryList} />
-                    <WatchedMoviesList
-                      watched={optimisticHistoryList}
-                      onDeleteWatched={handleDeleteWatched}
-                    />
+                    <div className="summary-container">
+                      <WatchedSummary watched={optimisticHistoryList} />
+                      <div className="list-container">
+                        <WatchedMoviesList
+                          watched={optimisticHistoryList}
+                          onDeleteWatched={handleDeleteWatched}
+                        />
+                      </div>
+                    </div>
                   </>
                 )}
               </MovieBox>
@@ -165,7 +157,7 @@ function MovieHistory() {
           </Grid>
         </Grid>
       </Box>
-    </Box>
+    </Grid>
   );
 }
 

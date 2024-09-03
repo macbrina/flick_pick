@@ -92,6 +92,19 @@ const MovieFilterForm = ({ onClose }) => {
         </Select>
       </FormControl>
 
+      <FormControl fullWidth>
+        <InputLabel>Type</InputLabel>
+        <Select
+          value={state.formData.type}
+          onChange={handleChange}
+          label="Type"
+          name="type"
+        >
+          <MenuItem value="movie">Movies</MenuItem>
+          <MenuItem value="tv">TV Shows</MenuItem>
+        </Select>
+      </FormControl>
+
       <TextField
         label="Release Year"
         type="number"

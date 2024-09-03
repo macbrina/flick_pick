@@ -6,7 +6,15 @@ import {
   checkAndAddUserToFirestore,
   getUserPartialData,
 } from "@/app/_lib/data-service";
-import { isEmptyObject } from "@/app/_utils/utilities";
+import {
+  generateUniqueId,
+  getChatLimitBasedOnPlan,
+  getHistoryLimitBasedOnPlan,
+  getPostLimitBasedOnPlan,
+  getScrapeLimitBasedOnPlan,
+  getWatchListLimitBasedOnPlan,
+  isEmptyObject,
+} from "@/app/_utils/utilities";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { signInWithCustomToken } from "firebase/auth";
 import { usePathname } from "next/navigation";
@@ -22,12 +30,19 @@ import { toast } from "react-toastify";
 const MoviesContext = createContext();
 
 const initialState = {
+  themeMode:
+    typeof window !== "undefined"
+      ? localStorage.getItem("themeMode") || "dark"
+      : "light",
   drawerOpen: true,
   pathname: "",
   fbUser: {},
   searchCollections: [],
   searchLoading: false,
+  postSearchLoading: false,
+  postSelectedId: null,
   selectedId: null,
+  selectedMovieType: "",
   searchError: "",
   watchList: [],
   historyList: [],
@@ -41,9 +56,10 @@ const initialState = {
   publicPosts: [],
   formData: {
     movieName: "",
-    genre: "",
+    genre: "28",
     releaseYear: "",
-    language: "english",
+    language: "en",
+    type: "movie",
   },
 };
 
@@ -52,6 +68,13 @@ function MoviesProvider({ children }) {
   const pathname = usePathname();
   const { getToken, userId } = useAuth();
   const { user, isLoaded } = useUser();
+
+  const toggleThemeMode = () => {
+    const newThemeMode = state.themeMode === "dark" ? "light" : "dark";
+
+    dispatch({ type: "TOGGLE_THEME_MODE" });
+    localStorage.setItem("themeMode", newThemeMode);
+  };
 
   const toggleDrawer = () => {
     dispatch({ type: "TOGGLE_DRAWER_MODE" });
@@ -100,22 +123,36 @@ function MoviesProvider({ children }) {
   );
 
   const loadPostList = useCallback(
-    (items) => {
-      dispatch({ type: "SET_POST_LIST", payload: items });
+    (items, hasMorePosts, lastPostTimestamp) => {
+      dispatch({
+        type: "SET_POST_LIST",
+        payload: {
+          posts: items,
+          hasMorePosts,
+          lastPostTimestamp,
+        },
+      });
     },
     [dispatch]
   );
 
-  const addToPostList = useCallback(
+  const addNewPost = useCallback(
     (post) => {
-      dispatch({ type: "ADD_TO_POST", payload: post });
+      dispatch({ type: "ADD_NEW_POST", payload: post });
+    },
+    [dispatch]
+  );
+
+  const setNewPostsAvailable = useCallback(
+    (available) => {
+      dispatch({ type: "SET_NEW_POSTS_AVAILABLE", payload: available });
     },
     [dispatch]
   );
 
   const removeFromPostList = useCallback(
-    (post) => {
-      dispatch({ type: "REMOVE_FROM_POST", payload: post });
+    (postId) => {
+      dispatch({ type: "REMOVE_FROM_POST", payload: postId });
     },
     [dispatch]
   );
@@ -124,6 +161,45 @@ function MoviesProvider({ children }) {
     (postId, operation) => {
       dispatch({
         type: "UPDATE_POST_COMMENTS",
+        payload: {
+          postId,
+          operation,
+        },
+      });
+    },
+    [dispatch]
+  );
+
+  const increasePostLikes = useCallback(
+    (postId, operation) => {
+      dispatch({
+        type: "UPDATE_POST_LIKES",
+        payload: {
+          postId,
+          operation,
+        },
+      });
+    },
+    [dispatch]
+  );
+
+  const increasePostWatchList = useCallback(
+    (postId, operation) => {
+      dispatch({
+        type: "UPDATE_WATCHLIST_ADD",
+        payload: {
+          postId,
+          operation,
+        },
+      });
+    },
+    [dispatch]
+  );
+
+  const increasePostHistory = useCallback(
+    (postId, operation) => {
+      dispatch({
+        type: "UPDATE_HISTORY_ADD",
         payload: {
           postId,
           operation,
@@ -155,11 +231,12 @@ function MoviesProvider({ children }) {
   );
 
   const handleSelectMovie = useCallback(
-    (id) => {
+    (id, movieType) => {
       const newId = id == state.selectedId ? null : id;
       dispatch({ type: "SET_SELECTED_ID", payload: newId });
+      dispatch({ type: "SET_SELECTED_MOVIE_TYPE", payload: movieType });
     },
-    [dispatch]
+    [dispatch, state.selectedId]
   );
 
   const updateSearchList = useCallback(
@@ -175,6 +252,14 @@ function MoviesProvider({ children }) {
     },
     [dispatch]
   );
+
+  useEffect(() => {
+    document.body.classList.toggle("dark", state.themeMode === "dark");
+
+    return () => {
+      document.body.classList.remove("dark", "light");
+    };
+  }, [state.themeMode]);
 
   useEffect(() => {
     const handlePathnameChange = () => {
@@ -211,16 +296,37 @@ function MoviesProvider({ children }) {
     async function addUserToDb() {
       if (user && isLoaded && state.userExist) {
         const userId = user.id;
+        const subscriptionId = generateUniqueId();
         const userData = {
           userId: user.id,
           email: user.primaryEmailAddress.emailAddress,
           avatarUrl: user.imageUrl,
           username: user.username,
+          subscriptionId: subscriptionId,
+          isPremium: false,
+          isActive: false,
           role: "user",
           createdAt: new Date(),
         };
+
+        const subscriptionData = {
+          userId: user.id,
+          status: "active",
+          plan: "Free",
+          endsAt: null,
+          id: subscriptionId,
+          price: "0.00",
+          stripeCustomerId: "",
+          postLimit: getPostLimitBasedOnPlan("Free"),
+          chatLimit: getChatLimitBasedOnPlan("Free"),
+          watchListLimit: getWatchListLimitBasedOnPlan("Free"),
+          historyLimit: getHistoryLimitBasedOnPlan("Free"),
+          scrapeLimit: getScrapeLimitBasedOnPlan("Free"),
+          createdAt: new Date(),
+        };
+
         try {
-          await checkAndAddUserToFirestore(userId, userData);
+          await checkAndAddUserToFirestore(userId, userData, subscriptionData);
           dispatch({ type: "SET_FBUSEREXIST_LOADING", payload: true });
         } catch (error) {
           console.error("Error adding in to Firebase:", error);
@@ -272,12 +378,17 @@ function MoviesProvider({ children }) {
         removeFromWatchList,
         addToHistoryList,
         loadPostList,
-        addToPostList,
+        addNewPost,
         removeFromPostList,
         removeFromComments,
         addToComments,
         loadComments,
         increasePostComments,
+        setNewPostsAvailable,
+        toggleThemeMode,
+        increasePostLikes,
+        increasePostHistory,
+        increasePostWatchList,
       }}
     >
       {children}
